@@ -27,6 +27,7 @@ databaseChangeLog:
       rollback:
         - sql:
             dbms: postgresql
+            sql: |
               DROP TABLE IF EXISTS user_experience.notification_state;
               DROP TABLE IF EXISTS user_experience.searches;
               DROP TABLE IF EXISTS user_experience.classroom_ratings;
@@ -44,6 +45,7 @@ databaseChangeLog:
       rollback:
         - sql:
             dbms: postgresql
+            sql: |
               DROP INDEX IF EXISTS user_experience.ix_searches_searched_at;
               DROP INDEX IF EXISTS user_experience.ix_searches_user_id;
               DROP INDEX IF EXISTS user_experience.ix_classroom_ratings_classroom_id;
