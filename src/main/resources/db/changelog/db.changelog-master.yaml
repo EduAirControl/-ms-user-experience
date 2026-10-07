@@ -1,0 +1,9 @@
+databaseChangeLog:
+  # 1) Esquema propio del servicio + extension para UUID.
+  - changeSet:
+      id: ms-user-experience-001-schemas
+      author: eduaircontrol
+      comment: Crea el esquema propio de ms-user-experience (ADR-003).
+      changes:
+        - sqlFile:
+            path: db/changelog/canonical/01_schemas/001_schemas.sql
