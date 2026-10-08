@@ -17,8 +17,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Autentica contra el JWT compartido o contra los headers del gateway
- * (trust-gateway-headers, ADR-016).
+ * Autentica contra los headers del gateway (trust-gateway-headers, ADR-016) o,
+ * en su defecto, contra el JWT compartido.
+ *
+ * <p>El orden importa y es el mismo que en ms-environment-monitoring: primero los
+ * headers internos del gateway, despues el Bearer. Si se invirtiera, el Bearer
+ * llegaria siempre (el gateway lo reenvia tal cual), fallaria al validarse como
+ * HS256 lo que en realidad es un token RS256 de ms-security, y el {@code return}
+ * se comeria la rama del gateway dejando la peticion sin autenticar.
  */
 @Component
 @RequiredArgsConstructor
@@ -33,7 +39,24 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         final String authHeader = request.getHeader("Authorization");
 
-        // 1. Intentar JWT Bearer token
+        // 1. Headers del gateway (prioritario: el gateway ya valido el JWT y reenvia
+        //    el Authorization original, que aqui no se puede verificar por firma).
+        String gatewayUserId = request.getHeader("X-User-Id");
+        String gatewayRole = request.getHeader("X-User-Role");
+        if (gatewayUserId != null && !gatewayUserId.isBlank()) {
+            String email = request.getHeader("X-User-Email");
+            String role = (gatewayRole != null && !gatewayRole.isBlank()) ? gatewayRole : "USER";
+            UsernamePasswordAuthenticationToken auth =
+                    new UsernamePasswordAuthenticationToken(
+                            email != null ? email : gatewayUserId,
+                            "gateway",
+                            List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+            SecurityContextHolder.getContext().setAuthentication(auth);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // 2. JWT Bearer, para llamadas directas al servicio.
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
             try {
@@ -47,22 +70,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             } catch (Exception e) {
                 log.debug("Token invalido: {}", e.getMessage());
             }
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // 2. Intentar headers del gateway (trust-gateway-headers)
-        String gatewayUserId = request.getHeader("X-User-Id");
-        String gatewayRole = request.getHeader("X-User-Role");
-        if (gatewayUserId != null && !gatewayUserId.isBlank()) {
-            String email = request.getHeader("X-User-Email");
-            String role = (gatewayRole != null && !gatewayRole.isBlank()) ? gatewayRole : "USER";
-            UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(
-                            email != null ? email : gatewayUserId,
-                            "gateway",
-                            List.of(new SimpleGrantedAuthority("ROLE_" + role)));
-            SecurityContextHolder.getContext().setAuthentication(auth);
         }
 
         filterChain.doFilter(request, response);
