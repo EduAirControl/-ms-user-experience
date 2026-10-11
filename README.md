@@ -12,14 +12,16 @@ y busquedas. No posee usuarios, ambientes ni variables: los referencia por UUID.
 
 ## Arranque local
 
-Requiere PostgreSQL en `localhost:5432`.
+Requiere PostgreSQL en `localhost:5432` (BD `eduaircontrol_user_experience`). La
+autenticación usa RS256 vía el JWKS de `ms-security` (ADR-006): no hay secreto local,
+el token lo emite ms-security.
 
 ```bash
-$env:POSTGRES_USER = "eduaircontrol"
-$env:POSTGRES_PASSWORD = "eduaircontrol"
-$env:JWT_SECRET = "una-clave-de-al-menos-32-caracteres-aqui"
+# local (necesita PostgreSQL con la BD eduaircontrol_user_experience)
+POSTGRES_USER=user_experience_user POSTGRES_PASSWORD=user_experience_pass ./mvnw spring-boot:run
 
-.\mvnw.cmd spring-boot:run
+# o stack del servicio (app + PostgreSQL)
+docker compose up --build
 ```
 
 ## Verificacion
