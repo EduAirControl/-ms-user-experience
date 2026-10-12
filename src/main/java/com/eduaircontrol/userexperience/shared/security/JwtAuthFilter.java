@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -45,12 +46,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String gatewayRole = request.getHeader("X-User-Role");
         if (gatewayUserId != null && !gatewayUserId.isBlank()) {
             String email = request.getHeader("X-User-Email");
-            String role = (gatewayRole != null && !gatewayRole.isBlank()) ? gatewayRole : "USER";
+            List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+            addAuthorities(authorities, request.getHeader("X-User-Roles"), gatewayRole);
+            // Sin rol alguno se asume USER: por esta via no deben quedar peticiones
+            // con cero autoridades.
+            if (authorities.isEmpty()) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+            }
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(
                             email != null ? email : gatewayUserId,
                             "gateway",
-                            List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+                            authorities);
             SecurityContextHolder.getContext().setAuthentication(auth);
             filterChain.doFilter(request, response);
             return;
@@ -78,4 +85,25 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         filterChain.doFilter(request, response);
     }
+
+    /**
+     * El gateway manda todos los roles en {@code X-User-Roles} (coma-separados) y deja el
+     * primero en {@code X-User-Role} por compatibilidad. Con un usuario de varios roles el
+     * header simple bastaba para perder SUPER_ADMIN al cruzar el gateway.
+     */
+    private static void addAuthorities(List<SimpleGrantedAuthority> authorities,
+            String rolesHeader, String singleRole) {
+        if (rolesHeader != null && !rolesHeader.isBlank()) {
+            for (String r : rolesHeader.split(",")) {
+                if (!r.isBlank()) {
+                    authorities.add(new SimpleGrantedAuthority("ROLE_" + r.trim()));
+                }
+            }
+            return;
+        }
+        if (singleRole != null && !singleRole.isBlank()) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + singleRole));
+        }
+    }
 }
+
