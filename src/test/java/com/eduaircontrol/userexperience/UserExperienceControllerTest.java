@@ -147,4 +147,42 @@ class UserExperienceControllerTest extends PostgresTestBase {
         mockMvc.perform(get("/api/v1/favorites"))
                 .andExpect(status().isUnauthorized());
     }
+
+    /**
+     * Regresion de R-001: los headers del gateway no autentican ni cambian la
+     * identidad. Sin token la peticion es 401 aunque vaya X-User-Id.
+     */
+    @Test
+    void forgedIdentityHeadersDoNotAuthenticate() throws Exception {
+        mockMvc.perform(get("/api/v1/preferences")
+                        .header("X-User-Id", userId.toString())
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * Regresion de R-001: la identidad sale del token, nunca de un header.
+     * Un token de A con un X-User-Id forjado de B sigue escribiendo como A.
+     */
+    @Test
+    void forgedUserIdHeaderDoesNotImpersonateAnotherUser() throws Exception {
+        UUID otherUser = UUID.randomUUID();
+        UUID environmentId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/favorites/" + environmentId + "/toggle")
+                        .header("Authorization", "Bearer " + token)
+                        .header("X-User-Id", otherUser.toString()))
+                .andExpect(status().isOk());
+
+        String otherToken = tokenFor(otherUser, "other-" + otherUser + "@test.com");
+        mockMvc.perform(get("/api/v1/favorites")
+                        .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        mockMvc.perform(get("/api/v1/favorites")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
 }
