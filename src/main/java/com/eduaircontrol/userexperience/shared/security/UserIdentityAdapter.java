@@ -7,11 +7,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * Identidad del solicitante leida del JWT o de los headers del gateway.
+ * Identidad del solicitante, resuelta desde los claims del JWT guardado como
+ * credencial por {@link JwtAuthFilter}. Los headers del gateway no se usan
+ * como identidad (R-001).
  */
 @Component
 @RequiredArgsConstructor
@@ -21,26 +21,14 @@ public class UserIdentityAdapter implements UserIdentityPort {
 
     @Override
     public Optional<UUID> currentUserId() {
-        // 1. Intentar desde el JWT
-        Optional<UUID> fromJwt = currentClaims().map(jwtService::optionalUserId).orElseGet(Optional::empty);
-        if (fromJwt.isPresent()) {
-            return fromJwt;
-        }
-        // 2. Intentar desde headers del gateway
-        return fromGatewayHeader("X-User-Id");
+        return currentClaims().map(jwtService::optionalUserId).orElseGet(Optional::empty);
     }
 
     @Override
     public Optional<String> currentEmail() {
-        // 1. Intentar desde el JWT
-        Optional<String> fromJwt = currentClaims()
+        return currentClaims()
                 .map(claims -> claims.getSubject())
                 .filter(email -> email != null && !email.isBlank());
-        if (fromJwt.isPresent()) {
-            return fromJwt;
-        }
-        // 2. Intentar desde headers del gateway
-        return fromGatewayStringHeader("X-User-Email");
     }
 
     private Optional<io.jsonwebtoken.Claims> currentClaims() {
@@ -51,40 +39,6 @@ public class UserIdentityAdapter implements UserIdentityPort {
         try {
             return Optional.of(jwtService.parse(token));
         } catch (RuntimeException e) {
-            return Optional.empty();
-        }
-    }
-
-    private Optional<UUID> fromGatewayHeader(String headerName) {
-        try {
-            ServletRequestAttributes attrs = (ServletRequestAttributes)
-                    RequestContextHolder.getRequestAttributes();
-            if (attrs == null) {
-                return Optional.empty();
-            }
-            String value = attrs.getRequest().getHeader(headerName);
-            if (value == null || value.isBlank()) {
-                return Optional.empty();
-            }
-            return Optional.of(UUID.fromString(value));
-        } catch (Exception e) {
-            return Optional.empty();
-        }
-    }
-
-    private Optional<String> fromGatewayStringHeader(String headerName) {
-        try {
-            ServletRequestAttributes attrs = (ServletRequestAttributes)
-                    RequestContextHolder.getRequestAttributes();
-            if (attrs == null) {
-                return Optional.empty();
-            }
-            String value = attrs.getRequest().getHeader(headerName);
-            if (value == null || value.isBlank()) {
-                return Optional.empty();
-            }
-            return Optional.of(value);
-        } catch (Exception e) {
             return Optional.empty();
         }
     }
